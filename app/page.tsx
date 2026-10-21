@@ -58,6 +58,9 @@ export default function Home() {
   const [preview, setPreview] = useState<TestEntry | null>(null);
   const locationRef = useRef<Branch | null>(null);
   const entriesRef = useRef(entries);
+  // A session lookup begun while an old user is signed in can finish after a
+  // new login. Keep it from replacing the location returned by that new login.
+  const authVersionRef = useRef(0);
   locationRef.current = location;
   entriesRef.current = entries;
 
@@ -79,9 +82,15 @@ export default function Home() {
     setTestCatalogue(data.tests);
   };
   useEffect(() => {
+    const version = authVersionRef.current;
     fetch('/api/auth/session').then(async (response) => {
-      if (response.ok) { const data = await response.json() as { branch: Branch }; setLocation(data.branch); }
-    }).catch(() => undefined).finally(() => setLoading(false));
+      if (response.ok) {
+        const data = await response.json() as { branch: Branch };
+        if (authVersionRef.current === version) setLocation(data.branch);
+      }
+    }).catch(() => undefined).finally(() => {
+      if (authVersionRef.current === version) setLoading(false);
+    });
   }, []);
   useEffect(() => { if (location) { void loadDashboard(); void loadTests(); } }, [location]);
   useEffect(() => {
@@ -107,6 +116,7 @@ export default function Home() {
   }, [location, reportSearch, entries]);
   const login = async (event: FormEvent) => {
     event.preventDefault();
+    authVersionRef.current += 1;
     const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ user, password }) });
     const data = await response.json().catch(() => ({})) as { branch?: Branch; error?: string };
     if (!response.ok || !data.branch) { setError(data.error || 'Unable to sign in.'); return; }
@@ -156,6 +166,7 @@ export default function Home() {
     setPreview(null); setTests([]); setReopenedEntry(entry); setEntryFormVersion((current) => current + 1); setSection('entry');
   };
   const signOut = async () => {
+    authVersionRef.current += 1;
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
     setLocation(null); setPassword(''); setEntries([]); setReviews([]); setTestCatalogue([]); setTests([]); setNavOpen(false);
   };
