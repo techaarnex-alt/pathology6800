@@ -22,6 +22,7 @@ export const BRANCHES: Branch[] = [
 type Runtime = { DB: D1Database; LAB_LOGIN_CREDENTIALS?: string };
 type SessionRow = { location_id: string; expires_at: number };
 type LoginAccount = { locationId: string; username: string; password: string };
+type LoginAccountInput = Partial<LoginAccount> & { branchId?: unknown; location?: unknown; user?: unknown; loginId?: unknown };
 
 export const db = () => (env as unknown as Runtime).DB;
 export const publicBranch = (branch: Branch) => ({ id: branch.id, short: branch.short, name: branch.name });
@@ -48,25 +49,31 @@ export function loginAccount(user: string, password: string) {
     throw new Error('LAB_LOGIN_CREDENTIALS must contain valid JSON.');
   }
 
-  if (!Array.isArray(accounts)) throw new Error('LAB_LOGIN_CREDENTIALS must be a JSON array.');
-  const configuredAccounts = accounts.filter((item): item is LoginAccount => {
-    if (!item || typeof item !== 'object') return false;
-    const candidate = item as Partial<LoginAccount>;
-    return typeof candidate.locationId === 'string'
-      && typeof candidate.username === 'string'
-      && typeof candidate.password === 'string'
-      && Boolean(candidate.username.trim())
-      && Boolean(candidate.password)
-      && Boolean(branchById(candidate.locationId));
-  });
+  // Accept both documented array values and an object keyed by location ID.
+  // This prevents one valid but differently-shaped secret from disabling every
+  // dispensary login.
+  const suppliedAccounts: unknown[] = Array.isArray(accounts)
+    ? accounts
+    : accounts && typeof accounts === 'object'
+      ? Object.entries(accounts as Record<string, unknown>).map(([locationId, value]) => value && typeof value === 'object' ? Object.assign({ locationId }, value as Record<string, unknown>) : value)
+      : [];
+  if (!suppliedAccounts.length) throw new Error('LAB_LOGIN_CREDENTIALS must contain at least one account.');
+  const configuredAccounts = suppliedAccounts.map((item): LoginAccount | null => {
+    if (!item || typeof item !== 'object') return null;
+    const candidate = item as LoginAccountInput;
+    const locationId = typeof candidate.locationId === 'string' ? candidate.locationId : typeof candidate.branchId === 'string' ? candidate.branchId : typeof candidate.location === 'string' ? candidate.location : '';
+    const username = typeof candidate.username === 'string' ? candidate.username : typeof candidate.user === 'string' ? candidate.user : typeof candidate.loginId === 'string' ? candidate.loginId : '';
+    const passwordValue = typeof candidate.password === 'string' ? candidate.password : '';
+    return username.trim() && passwordValue && branchById(locationId) ? { locationId, username: username.trim(), password: passwordValue } : null;
+  }).filter((account): account is LoginAccount => Boolean(account));
 
   const uniqueLocationIds = new Set(configuredAccounts.map((account) => account.locationId));
   const uniqueUsernames = new Set(configuredAccounts.map((account) => account.username.trim().toLowerCase()));
   if (
-    configuredAccounts.length !== BRANCHES.length
-    || uniqueLocationIds.size !== BRANCHES.length
-    || uniqueUsernames.size !== BRANCHES.length
-  ) throw new Error('LAB_LOGIN_CREDENTIALS must have one valid, unique account for every location.');
+    !configuredAccounts.length
+    || uniqueLocationIds.size !== configuredAccounts.length
+    || uniqueUsernames.size !== configuredAccounts.length
+  ) throw new Error('LAB_LOGIN_CREDENTIALS contains invalid or duplicate accounts.');
 
   return configuredAccounts.find((account) => account.username.trim().toLowerCase() === user && account.password === password) ?? null;
 }
