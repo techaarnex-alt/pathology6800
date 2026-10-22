@@ -7,6 +7,7 @@ export const labEntries = sqliteTable(
     reportNumber: text('report_number').notNull().unique(),
     locationId: text('location_id').notNull(),
     patient: text('patient').notNull(),
+    title: text('title').notNull().default(''),
     registrationNumber: text('registration_number').notNull(),
     ipNumber: text('ip_number').notNull(),
     age: text('age').notNull(),

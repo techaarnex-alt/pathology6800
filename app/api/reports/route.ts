@@ -1,6 +1,6 @@
-import { cleanText, db, json, referralSourceById, sessionBranch } from '@/lib/server/lab';
+import { cleanText, db, isMissingPatientTitleColumn, json, referralSourceById, sessionBranch } from '@/lib/server/lab';
 
-type EntryRow = { id: number; report_number: string; patient: string; registration_number: string; ip_number: string; age: string; sex: string; relationship: string; ip_holder_name: string; transferred_from_location_id: string | null; source_entry_id: number | null; tests_json: string; created_at: number };
+type EntryRow = { id: number; report_number: string; patient: string; title: string; registration_number: string; ip_number: string; age: string; sex: string; relationship: string; ip_holder_name: string; transferred_from_location_id: string | null; source_entry_id: number | null; tests_json: string; created_at: number };
 
 const escapeLike = (value: string) => value.replace(/[\\%_]/g, '\\$&');
 
@@ -12,8 +12,10 @@ export async function GET(request: Request) {
   if (!search) return json({ error: 'Enter a patient, registration, IP, or report number.' }, 400);
 
   const pattern = `%${escapeLike(search)}%`;
-  const result = await db().prepare(`
-    SELECT id, report_number, patient, registration_number, ip_number, age, sex, relationship, ip_holder_name, transferred_from_location_id, source_entry_id, tests_json, created_at
+  let result;
+  try {
+    result = await db().prepare(`
+    SELECT id, report_number, patient, title, registration_number, ip_number, age, sex, relationship, ip_holder_name, transferred_from_location_id, source_entry_id, tests_json, created_at
     FROM lab_entries
     WHERE location_id = ?
       AND (
@@ -24,12 +26,22 @@ export async function GET(request: Request) {
       )
     ORDER BY created_at DESC
     LIMIT 100
-  `).bind(branch.id, pattern, pattern, pattern, pattern).all<EntryRow>();
+    `).bind(branch.id, pattern, pattern, pattern, pattern).all<EntryRow>();
+  } catch (error) {
+    if (!isMissingPatientTitleColumn(error)) throw error;
+    result = await db().prepare(`
+      SELECT id, report_number, patient, registration_number, ip_number, age, sex, relationship, ip_holder_name, transferred_from_location_id, source_entry_id, tests_json, created_at
+      FROM lab_entries
+      WHERE location_id = ? AND (registration_number COLLATE NOCASE LIKE ? ESCAPE char(92) OR patient COLLATE NOCASE LIKE ? ESCAPE char(92) OR ip_number COLLATE NOCASE LIKE ? ESCAPE char(92) OR report_number COLLATE NOCASE LIKE ? ESCAPE char(92))
+      ORDER BY created_at DESC LIMIT 100
+    `).bind(branch.id, pattern, pattern, pattern, pattern).all<EntryRow>();
+  }
 
   const entries = (result.results || []).map((entry) => ({
     recordId: entry.id,
     id: entry.report_number,
     patient: entry.patient,
+    title: entry.title || '',
     registrationNumber: entry.registration_number,
     ip: entry.ip_number,
     age: entry.age,

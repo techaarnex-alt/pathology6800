@@ -95,6 +95,13 @@ export function cleanText(value: unknown, limit: number) {
   return typeof value === 'string' ? value.trim().slice(0, limit) : '';
 }
 
+// Hosted databases created before the title field was introduced may not have
+// received the migration yet. Routes use this to keep the booking workflow
+// available while the migration is applied, instead of returning a blank 500.
+export function isMissingPatientTitleColumn(error: unknown) {
+  return /(no such column|has no column named)\s*:?\s*title/i.test(String(error));
+}
+
 export function safeTests(value: unknown) {
   const allowed = new Set(['CBC', 'ESR', 'Peripheral Smear', 'Blood Sugar', 'LFT', 'RFT', 'Lipid Profile', 'HbA1c', 'Thyroid Profile', 'Serum Sodium', 'Serum Potassium', 'Urine Routine', 'Stool Routine']);
   if (!Array.isArray(value)) return [];
