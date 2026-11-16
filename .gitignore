@@ -1,0 +1,4 @@
+# Local authentication configuration — never commit passwords or password hashes.
+demo/.env
+demo/.env.*
+!demo/.env.example
