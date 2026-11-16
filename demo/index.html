@@ -362,7 +362,8 @@ bootAccess();
       body.print-without-letterhead .report-pro .report-address,
       body.print-without-letterhead .report-pro .report-foot,
       body.print-without-letterhead .bill-sheet .bill-header{display:none!important}
-      body.print-without-letterhead .report-sheet.report-pro{padding-top:0!important}
+      /* Keep the report body below the pre-printed letterhead when using plain paper. */
+      body.print-without-letterhead .report-sheet.report-pro{padding-top:38mm!important}
       body.print-without-letterhead .bill-sheet{padding-top:0!important;border-top:0!important}
       body.print-without-letterhead .report-pro .report-title{margin-top:0!important}
       body.print-without-letterhead .bill-title{margin-top:0!important}
